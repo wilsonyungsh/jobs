@@ -6,7 +6,7 @@ import org.apache.sedona.core.serde.SedonaKryoRegistrator
 import org.apache.sedona.sql.utils.SedonaSQLRegistrator
 import org.apache.spark.sql.functions.{concat, expr, input_file_name, lit, regexp_replace} //
 
-object cell_inventory_map {
+object CellInventoryMap {
 
   def main(args: Array[String]) {
     //set up parameters
@@ -21,7 +21,7 @@ object cell_inventory_map {
 
     // setup sedona instance
     val spark = SparkSession.builder()
-      .appName("sedona") // Change this to a proper name
+      //.appName("sedona") // Change this to a proper name
       .config("spark.serializer", classOf[KryoSerializer].getName)
       .config("spark.kryo.registrator", classOf[SedonaKryoRegistrator].getName)
       .config("geospark.global.index", "true") //index
