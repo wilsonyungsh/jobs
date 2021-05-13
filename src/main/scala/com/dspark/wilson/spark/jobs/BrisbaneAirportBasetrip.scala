@@ -80,8 +80,6 @@ object BrisbaneAirportBasetrip {
           case _ => "s3://au-daas-compute/output-v2/parquet-v2/agent-profile/"
         }
 
-      println("agent_profile path : " + agent_profile_path + date)
-
       val agent_profile = spark.read.parquet(agent_profile_path + date).withColumn("mark", lit(1))
 
       //join
