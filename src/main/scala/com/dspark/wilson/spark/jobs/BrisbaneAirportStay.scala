@@ -46,7 +46,7 @@ object BrisbaneAirportStay {
           ("s3://au-daas-compute/output/parquet/union_staypoint_enriched/" + date).mkString
         }
         println("staypoint path : " + path)
-        spark.read.parquet(path).repartition(20)
+        spark.read.parquet(path).withColumnRenamed("agentId","agent_id").repartition(20)
       }
       // read in weight
       val weight = {
@@ -56,7 +56,7 @@ object BrisbaneAirportStay {
         else {
           ("s3://au-daas-compute/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString
         }
-        spark.read.format("csv").option("header", "false").load(path).toDF("agentId", "weight").withColumnRenamed("agentId", "agent_id")
+        spark.read.format("csv").option("header", "false").load(path).toDF("agent_id", "weight")
       }
 
       //read in agent_profile

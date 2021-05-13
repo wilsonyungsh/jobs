@@ -62,14 +62,14 @@ object BrisbaneAirportBasetrip {
       val trip = {
         val path = if (date < "20191201") {("s3://au-daas-latest/output/parquet/trip/" + date + "/*/").mkString}
         else {("s3a://au-daas-compute/output/parquet/trip/" + date).mkString}
-        spark.read.parquet(path).repartition(320)
+        spark.read.parquet(path).repartition(320).withColumnRenamed("agentId","agent_id")
       }
       // read in weight
       val weight = {
         val path = if (date <= "20191130") {("s3://au-daas-latest/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString}
         else {("s3://au-daas-compute/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString}
 
-        spark.read.format("csv").option("header", "false").load(path).toDF("agentId", "weight")
+        spark.read.format("csv").option("header", "false").load(path).toDF("agent_id", "weight")
       }
 
       //read in agent_profile
@@ -83,8 +83,8 @@ object BrisbaneAirportBasetrip {
       val agent_profile = spark.read.parquet(agent_profile_path + date).withColumn("mark", lit(1))
 
       //join
-      val trip_join = trip.join(weight, Seq("agentId"))
-        .join(agent_profile, Seq("agentId"), "left")
+      val trip_join = trip.join(weight, Seq("agent_id"))
+        .join(agent_profile, Seq("agent_id"), "left")
         .withColumn("islocal", when($"mark".isNull, 0).otherwise(1))
         .join(origin_geo, trip.col("startGeoUnitId") === origin_geo.col("geo_hierarchy_base_id")).drop("geo_hierarchy_base_id")
         .join(dest_geo, trip.col("endGeoUnitId") === dest_geo.col("geo_hierarchy_base_id")).drop("geo_hierarchy_base_id")
@@ -93,12 +93,11 @@ object BrisbaneAirportBasetrip {
 
       trip_join.join(home_geo, Seq("home_geo_unit_id"), "left") //use left join to keep all record in trip_join
         .join(work_geo, Seq("work_geo_unit_id"), "left")
-        .select($"agentId",$"weight",$"startGeoUnitId",$"endGeoUnitId", $"startTime", $"endTime", $"dominantMode", $"purpose", $"distance", $"duration", $"trajectory",
+        .select($"agent_id",$"weight",$"startGeoUnitId",$"endGeoUnitId", $"startTime", $"endTime", $"dominantMode", $"purpose", $"distance", $"duration", $"trajectory",
           $"origin_sa1",$"origin_gcc",$"origin_state", $"dest_sa1",$"dest_gcc",$"dest_state",$"home_sa1",$"home_sa2",$"home_sa3", $"home_gcc", $"home_state",
           $"work_sa1",$"work_sa2",$"work_sa3", $"work_gcc", $"work_state",
           $"linksInfo", $"islocal", $"originStaypointType", $"destStaypointType", $"originBuilding", $"destBuilding",
           $"listOfModes",$"OriginalListOfLinks",$"stopIDs",$"parentIDs",$"listOfLinks")
-        .withColumnRenamed("agentId","agent_id")
         .repartition(2, $"agent_id")
         .sortWithinPartitions("agent_id")
         .write
