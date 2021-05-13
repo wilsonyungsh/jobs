@@ -95,6 +95,7 @@ object BrisbaneAirportBasetrip {
           $"work_sa1",$"work_sa2",$"work_sa3", $"work_gcc", $"work_state",
           $"linksInfo", $"islocal", $"originStaypointType", $"destStaypointType", $"originBuilding", $"destBuilding",
           $"listOfModes",$"OriginalListOfLinks",$"stopIDs",$"parentIDs",$"listOfLinks")
+        .withColumnRenamed("agentId","agent_id")
         .repartition(2, $"agent_id")
         .sortWithinPartitions("agent_id")
         .write
