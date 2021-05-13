@@ -50,30 +50,25 @@ object BrisbaneAirportStay {
       }
       // read in weight
       val weight = {
-        val path = if (date <= "20190430") {
+        val path = if (date <= "20191130") {
           ("s3://au-daas-latest/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString
-        }
-        else if (date <= "20191130") {
-          ("s3://au-daas-compute-sg/xtrapolation_for_roamer-v2/merge_imsi_weight/" + date).mkString
         }
         else {
           ("s3://au-daas-compute/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString
         }
-        println("weight path : " + path)
         spark.read.format("csv").option("header", "false").load(path).toDF("agentId", "weight").withColumnRenamed("agentId", "agent_id")
       }
 
       //read in agent_profile
-      val agent_profile = {
-        val path = if (date <= "20191130") {
-          ("s3://au-daas-compute/output-v2/parquet-v2/agent-profile/" + date).mkString
+
+      val agent_profile_path =
+        date match {
+          case x if (x >= "20190101" && x<="20190131") || (x >= "20190301" && x<="20190331") || (x >= "20191001" && x<="20191031")=> "s3://au-daas-compute/output-v3/parquet-v3/agent-profile/"
+          case x if x >= "20191201" && x<="20191231" => "s3://au-daas-compute/output/parquet/agent-profile/"
+          case _ => "s3://au-daas-compute/output-v2/parquet-v2/agent-profile/"
         }
-        else {
-          ("s3://au-daas-compute/output/parquet/agent-profile/" + date).mkString
-        }
-        println("agent_profile path : " + path)
-        spark.read.parquet(path).withColumn("mark", lit(1))
-      }
+
+      val agent_profile = spark.read.parquet(agent_profile_path + date).withColumn("mark", lit(1))
       //join agent with weight and geoh
       val agent_wt_joined = weight.join(agent_profile, Seq("agent_id"), "left")
         .join(home_geo, Seq("home_geo_unit_id"), "left")
