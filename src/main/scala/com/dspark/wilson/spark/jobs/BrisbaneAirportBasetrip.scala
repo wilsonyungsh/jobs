@@ -28,52 +28,54 @@ object BrisbaneAirportBasetrip {
     //date period
     val daterange = daySequence(sd,ed)
 
-    //read in geo table
-    val geohierarchy = spark.read.parquet("s3a://au-daas-compute/output/parquet/aggregated-geo-hierarchy/latest")
-    val origin_geo = geohierarchy.withColumnRenamed("sa1", "origin_sa1")
-      .withColumnRenamed("gcc", "origin_gcc")
-      .withColumnRenamed("state", "origin_state")
-      .select("geo_hierarchy_base_id", "origin_sa1","origin_gcc","origin_state")
-    val dest_geo = geohierarchy.withColumnRenamed("sa1", "dest_sa1")
-      .withColumnRenamed("gcc", "dest_gcc")
-      .withColumnRenamed("state", "dest_state")
-      .select("geo_hierarchy_base_id", "dest_sa1","dest_gcc","dest_state")
-
-    val home_geo = geohierarchy.withColumnRenamed("sa1", "home_sa1")
-      .withColumnRenamed("sa2", "home_sa2")
-      .withColumnRenamed("sa3", "home_sa3")
-      .withColumnRenamed("gcc", "home_gcc")
-      .withColumnRenamed("state", "home_state")
-      .withColumnRenamed("geo_hierarchy_base_id", "home_geo_unit_id")
-      .select("home_geo_unit_id", "home_sa1","home_sa2","home_sa3", "home_gcc", "home_state")
-
-    val work_geo = geohierarchy.withColumnRenamed("sa1", "work_sa1")
-      .withColumnRenamed("sa2", "work_sa2")
-      .withColumnRenamed("sa3", "work_sa3")
-      .withColumnRenamed("gcc", "work_gcc")
-      .withColumnRenamed("state", "work_state")
-      .withColumnRenamed("geo_hierarchy_base_id", "work_geo_unit_id")
-      .select("work_geo_unit_id", "work_sa1","work_sa2","work_sa3", "work_gcc", "work_state")
 
     for (date<- daterange) {
 
+
+      //read in geo table
+      val geohierarchy = spark.read.parquet("s3://au-daas-compute/output/parquet/aggregated-geo-hierarchy/" + date)
+      val origin_geo = geohierarchy.withColumnRenamed("sa1", "origin_sa1")
+        .withColumnRenamed("gcc", "origin_gcc")
+        .withColumnRenamed("state", "origin_state")
+        .select("geo_hierarchy_base_id", "origin_sa1","origin_gcc","origin_state")
+      val dest_geo = geohierarchy.withColumnRenamed("sa1", "dest_sa1")
+        .withColumnRenamed("gcc", "dest_gcc")
+        .withColumnRenamed("state", "dest_state")
+        .select("geo_hierarchy_base_id", "dest_sa1","dest_gcc","dest_state")
+
+      val home_geo = geohierarchy.withColumnRenamed("sa1", "home_sa1")
+        .withColumnRenamed("sa2", "home_sa2")
+        .withColumnRenamed("sa3", "home_sa3")
+        .withColumnRenamed("gcc", "home_gcc")
+        .withColumnRenamed("state", "home_state")
+        .withColumnRenamed("geo_hierarchy_base_id", "home_geo_unit_id")
+        .select("home_geo_unit_id", "home_sa1","home_sa2","home_sa3", "home_gcc", "home_state")
+
+      val work_geo = geohierarchy.withColumnRenamed("sa1", "work_sa1")
+        .withColumnRenamed("sa2", "work_sa2")
+        .withColumnRenamed("sa3", "work_sa3")
+        .withColumnRenamed("gcc", "work_gcc")
+        .withColumnRenamed("state", "work_state")
+        .withColumnRenamed("geo_hierarchy_base_id", "work_geo_unit_id")
+        .select("work_geo_unit_id", "work_sa1","work_sa2","work_sa3", "work_gcc", "work_state")
+
       val trip = {
-        val path = if (date < "20191201") {("s3a://au-daas-latest/output/parquet/trip/" + date + "/*/").mkString}
+        val path = if (date < "20191201") {("s3://au-daas-latest/output/parquet/trip/" + date + "/*/").mkString}
         else {("s3a://au-daas-compute/output/parquet/trip/" + date).mkString}
         spark.read.parquet(path).repartition(320)
       }
       // read in weight
       val weight = {
-        val path = if (date <= "20190525") {("s3a://au-daas-latest/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString}
-        else if (date <= "20191130") {("s3a://au-daas-compute/xtrapolation_for_roamer-v2/merge_imsi_weight/" + date).mkString}
-        else {("s3a://au-daas-compute/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString}
+        val path = if (date <= "20190525") {("s3://au-daas-latest/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString}
+        else if (date <= "20191130") {("s3://au-daas-compute/xtrapolation_for_roamer-v2/merge_imsi_weight/" + date).mkString}
+        else {("s3://au-daas-compute/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString}
         spark.read.format("csv").option("header", "false").load(path).toDF("agentId", "weight")
       }
 
       //read in agent_profile
       val agent_profile = {
-        val path = if (date <= "20191130") {("s3a://au-daas-compute/output-v2/parquet-v2/agent-profile/" + date).mkString}
-        else {("s3a://au-daas-compute/output/parquet/agent-profile/" + date).mkString}
+        val path = if (date <= "20191130") {("s3://au-daas-compute/output-v2/parquet-v2/agent-profile/" + date).mkString}
+        else {("s3://au-daas-compute/output/parquet/agent-profile/" + date).mkString}
         spark.read.parquet(path).withColumnRenamed("agent_id", "agentId").withColumn("mark", lit(1))
       }
 
@@ -93,9 +95,11 @@ object BrisbaneAirportBasetrip {
           $"work_sa1",$"work_sa2",$"work_sa3", $"work_gcc", $"work_state",
           $"linksInfo", $"islocal", $"originStaypointType", $"destStaypointType", $"originBuilding", $"destBuilding",
           $"listOfModes",$"OriginalListOfLinks",$"stopIDs",$"parentIDs",$"listOfLinks")
+        .repartition(2, $"agent_id")
+        .sortWithinPartitions("agent_id")
         .write
         .mode("overwrite")
-        .parquet(("s3a://au-daas-users/wilson/clients/tmr_airport/" + airportname + "/tripStartOrEndAirport/" + date).mkString)
+        .parquet(("s3://au-daas-users/wilson/clients/tmr_airport/" + airportname + "/tripStartOrEndAirport/" + date).mkString)
     }
     //stop spark
     spark.stop

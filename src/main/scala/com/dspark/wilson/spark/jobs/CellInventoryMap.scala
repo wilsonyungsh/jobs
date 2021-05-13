@@ -34,7 +34,7 @@ object CellInventoryMap {
     SedonaSQLRegistrator.registerAll(spark)
     import spark.implicits._
 
-    val inputPath = "s3a://au-daas-compute/input/cell-inventory/" + date + "/*"
+    val inputPath = "s3://au-daas-compute/input/cell-inventory/" + date + "/*"
     val fields = "site_id,site_name,lac,lga_name,site_type,gda_94_longitude,gda_94_latitude,technology,band,cell_sector_no,cell_id,cell_name,sac_id,sa3_code,rnc_bsc,cell_first_seen,antenna_azimuth,beam_width_horizontal,beam_width_vertical,antenna_electric_down_tilt,antenna_mechanical_down_tilt,antenna_height,antenna_gain,antenna_type,cell_power,feeder_length,feeder_size,cell_status"
     val cellInventory = spark.read.format("csv").option("delimiter", "|").load(inputPath).toDF(fields.split(","): _*)
       .withColumn("file_date", regexp_replace(input_file_name(), "^.*?(\\d{8}).*$", "$1"))
@@ -63,7 +63,7 @@ object CellInventoryMap {
       "select z.*,y.suburb_name,y.suburb_code from (select a.*,b.sa1,b.sa2,b.sa2_name,b.state,b.state_name from cell a,sa1_geom b where st_within(a.geom,b.geom)) z,ssc_geom y where st_within(z.geom,y.geom)"
     ).drop("geom")
 
-    val output_path = "s3a://au-daas-users/wilson/cell_inventory/" + date
+    val output_path = "s3://au-daas-users/wilson/cell_inventory/" + date
     cell_complete.coalesce(1).write.option("header", "true").mode(SaveMode.Overwrite).format("csv").save(output_path)
 
 

@@ -24,22 +24,26 @@ object BrisbaneAirportStay {
 
     //date period
     val daterange = daySequence(sd, ed)
-    val geohierarchy = spark.read.parquet("s3a://au-daas-compute/output/parquet/aggregated-geo-hierarchy/latest")
-    val geo = geohierarchy.selectExpr("sa1", "sa2", "sa3", "state", "geo_hierarchy_base_id as geo_unit_id")
-    val home_geo = geohierarchy.selectExpr("sa1 as home_sa1", "sa2 as home_sa2", "sa3 as home_sa3", "state as home_state", "geo_hierarchy_base_id as home_geo_unit_id")
-    val work_geo = geohierarchy.selectExpr("sa1 as work_sa1", "sa2 as work_sa2", "sa3 as work_sa3", "state as work_state", "geo_hierarchy_base_id as work_geo_unit_id")
-
-    //specify airport sa1 to filter to
-    val airport_sa1 = geo.filter('sa1 === sa1_code)
 
     for (date <- daterange) {
+
+      val geohierarchy = spark.read.parquet("s3://au-daas-compute/output/parquet/aggregated-geo-hierarchy/" + date)
+      val geo = geohierarchy.selectExpr("sa1", "sa2", "sa3", "state", "geo_hierarchy_base_id as geo_unit_id")
+      val home_geo = geohierarchy.selectExpr("sa1 as home_sa1", "sa2 as home_sa2", "sa3 as home_sa3", "state as home_state", "geo_hierarchy_base_id as home_geo_unit_id")
+      val work_geo = geohierarchy.selectExpr("sa1 as work_sa1", "sa2 as work_sa2", "sa3 as work_sa3", "state as work_state", "geo_hierarchy_base_id as work_geo_unit_id")
+
+      //specify airport sa1 to filter to
+      val airport_sa1 = geo.filter('sa1 === sa1_code)
+
+
+
       // read in staypoint
       val stay = {
         val path = if (date < "20191201") {
-          ("s3a://au-daas-latest/output/parquet/union_staypoint_enriched/" + date + "/*/").mkString
+          ("s3://au-daas-latest/output/parquet/union_staypoint_enriched/" + date + "/*/").mkString
         }
         else {
-          ("s3a://au-daas-compute/output/parquet/union_staypoint_enriched/" + date).mkString
+          ("s3://au-daas-compute/output/parquet/union_staypoint_enriched/" + date).mkString
         }
         println("staypoint path : " + path)
         spark.read.parquet(path).repartition(20)
@@ -47,13 +51,13 @@ object BrisbaneAirportStay {
       // read in weight
       val weight = {
         val path = if (date <= "20190430") {
-          ("s3a://au-daas-latest/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString
+          ("s3://au-daas-latest/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString
         }
         else if (date <= "20191130") {
-          ("s3a://au-daas-compute-sg/xtrapolation_for_roamer-v2/merge_imsi_weight/" + date).mkString
+          ("s3://au-daas-compute-sg/xtrapolation_for_roamer-v2/merge_imsi_weight/" + date).mkString
         }
         else {
-          ("s3a://au-daas-compute/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString
+          ("s3://au-daas-compute/xtrapolation_for_roamer/merge_imsi_weight/" + date).mkString
         }
         println("weight path : " + path)
         spark.read.format("csv").option("header", "false").load(path).toDF("agentId", "weight").withColumnRenamed("agentId", "agent_id")
@@ -62,10 +66,10 @@ object BrisbaneAirportStay {
       //read in agent_profile
       val agent_profile = {
         val path = if (date <= "20191130") {
-          ("s3a://au-daas-compute/output-v2/parquet-v2/agent-profile/" + date).mkString
+          ("s3://au-daas-compute/output-v2/parquet-v2/agent-profile/" + date).mkString
         }
         else {
-          ("s3a://au-daas-compute/output/parquet/agent-profile/" + date).mkString
+          ("s3://au-daas-compute/output/parquet/agent-profile/" + date).mkString
         }
         println("agent_profile path : " + path)
         spark.read.parquet(path).withColumn("mark", lit(1))
@@ -82,8 +86,11 @@ object BrisbaneAirportStay {
         .withColumn("durationInSec", to_timestamp('out_time).cast("Long") - to_timestamp('in_time).cast("Long"))
 
       // output
-      sp_step1.write.mode("overwrite")
-        .parquet(("s3a://au-daas-users/wilson/clients/tmr_airport/" + airportname + "/stayInAirportSA1/" + date).mkString)
+      sp_step1
+        .repartition(1, $"agent_id")
+        .sortWithinPartitions("agent_id")
+        .write.mode("overwrite")
+        .parquet(("s3://au-daas-users/wilson/clients/tmr_airport/" + airportname + "/stayInAirportSA1/" + date).mkString)
     }
   }
 }
